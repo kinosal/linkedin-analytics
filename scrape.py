@@ -16,9 +16,9 @@ from bs4 import BeautifulSoup
 
 
 class LinkedIn:
-    loginname = os.getenv("LOGINNAME")
-    password = os.getenv("PASSWORD")
-    username = os.getenv("USERNAME")
+    loginname = os.getenv("LOGINNAME")  # LinkedIn login name
+    password = os.getenv("PASSWORD")  # LinkedIn password
+    username = os.getenv("USERNAME")  # LinkedIn username to scrape posts from
 
     options = Options()
     options.add_argument("start-maximized")
@@ -51,6 +51,7 @@ class LinkedIn:
     }
 
     def login(self):
+        """Login to LinkedIn with Selenium."""
         self.browser.get("https://www.linkedin.com/login")
         user_field = self.browser.find_element("id", "username")
         user_field.send_keys(self.loginname)
@@ -59,7 +60,10 @@ class LinkedIn:
         password_field.submit()
 
     @staticmethod
-    def extract_count(post_soup, tag, attrs):
+    def extract_count(
+            post_soup: BeautifulSoup.element.Tag, tag: str, attrs: dict
+    ) -> int:
+        """Extract number from a post HTML tag."""
         tag = post_soup.find(tag, attrs=attrs)
         if not tag:
             return 0
@@ -68,18 +72,21 @@ class LinkedIn:
         without_comma = last_string.replace(",", "")
         # Add 1 if a user name "and" an added number are displayed
         if re.search(re.compile(r"\band\b"), str(tag)):
+            print("'and' found")
             return int(without_comma) + 1
         return int(without_comma)
 
     @staticmethod
-    def extract_url(post_soup) -> str:
+    def extract_url(post_soup: BeautifulSoup.element.Tag) -> str:
+        """Extract URL from a post HTML tag."""
         div = post_soup.find("div", attrs={"class": "content-analytics-entry-point"})
         if not div:
             return ""
         return "https://www.linkedin.com" + div.find("a").get("href")
 
     @staticmethod
-    def extract_time(post_soup):
+    def extract_time(post_soup: BeautifulSoup.element.Tag) -> str:
+        """Extract time from a post HTML tag, using the post ID."""
         div = post_soup.find("div", attrs={"class": "content-analytics-entry-point"})
         if not div:
             return ""
@@ -88,7 +95,8 @@ class LinkedIn:
         time = datetime.datetime.fromtimestamp(int(binary_time, 2) / 1e3)
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
-    def get_post_analytics(self):
+    def get_post_analytics(self) -> list:
+        """Get analytics post HTML tags."""
         soup = BeautifulSoup(linkedin.browser.page_source, features="lxml")
         post_soups = soup.find_all(
             "div",
@@ -110,7 +118,8 @@ class LinkedIn:
             posts.append(tags)
         return posts
 
-    def show_posts(self, n_posts):
+    def show_posts(self, n_posts: int):
+        """Show n_posts posts by scrolling the page."""
         self.browser.get(
             "https://www.linkedin.com/in/"
             + self.username
@@ -143,7 +152,7 @@ if __name__ == "__main__":
     linkedin = LinkedIn()
     linkedin.login()
     print("Logged in")
-    linkedin.show_posts(n_posts=50)
+    linkedin.show_posts(n_posts=5)
     print("Scrolled to show posts")
     post_analytics = linkedin.get_post_analytics()
     print("Scraped posts")
