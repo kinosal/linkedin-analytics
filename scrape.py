@@ -34,7 +34,9 @@ class LinkedIn:
     element_identifiers = {
         "reactions": {
             "tag": "li",
-            "attrs": {"class": "social-details-social-counts__item social-details-social-counts__reactions social-details-social-counts__reactions--with-social-proof"},
+            "attrs": {
+                "class": "social-details-social-counts__item social-details-social-counts__reactions social-details-social-counts__reactions--with-social-proof"
+            },
         },
         "comments": {
             "tag": "li",
@@ -64,6 +66,9 @@ class LinkedIn:
         list_of_matches = re.findall("[,0-9]+", str(tag))
         last_string = list_of_matches.pop()
         without_comma = last_string.replace(",", "")
+        # Add 1 if a user name "and" an added number are displayed
+        if re.search(re.compile(r"\band\b"), str(tag)):
+            return int(without_comma) + 1
         return int(without_comma)
 
     @staticmethod
@@ -83,26 +88,25 @@ class LinkedIn:
         time = datetime.datetime.fromtimestamp(int(binary_time, 2) / 1e3)
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
-    def get_post_analytics(self, soup):
-        posts = []
+    def get_post_analytics(self):
+        soup = BeautifulSoup(linkedin.browser.page_source, features="lxml")
         post_soups = soup.find_all(
             "div",
             attrs={"class": "social-details-social-activity update-v2-social-activity"},
         )
+        posts = []
         for post_soup in post_soups:
             tags = {}
             tags["url"] = self.extract_url(post_soup)
             if not tags["url"]:
                 continue
             tags["time"] = self.extract_time(post_soup)
-            for tag_type in ["reactions", "comments", "impressions"]:
-                count = self.extract_count(
+            for tag_type in self.element_identifiers:
+                tags[tag_type] = self.extract_count(
                     post_soup,
                     self.element_identifiers[tag_type]["tag"],
                     self.element_identifiers[tag_type]["attrs"],
                 )
-                # Add 1 to each reaction since one is shown as name
-                tags[tag_type] = count + 1 if tag_type == "reactions" else count
             posts.append(tags)
         return posts
 
@@ -113,15 +117,13 @@ class LinkedIn:
             + "/detail/recent-activity/shares/"
         )
 
-        # Calculate number of necessary scrolls
-        number_of_scrolls = -(
-            -n_posts // 5
-        )  # 5 is LinkedIn's number of posts per scroll
+        # Calculate number of necessary scrolls (5 posts per scroll)
+        n_scrolls = -(-n_posts // 5)
 
-        # Get scroll height
+        # Get current scroll height
         last_height = self.browser.execute_script("return document.body.scrollHeight")
 
-        for scroll in range(number_of_scrolls):
+        for scroll in range(n_scrolls):
             # Scroll down to bottom
             self.browser.execute_script(
                 "window.scrollTo(0, document.body.scrollHeight);"
@@ -143,8 +145,7 @@ if __name__ == "__main__":
     print("Logged in")
     linkedin.show_posts(n_posts=50)
     print("Scrolled to show posts")
-    soup = BeautifulSoup(linkedin.browser.page_source, features="lxml")
-    post_analytics = linkedin.get_post_analytics(soup)
+    post_analytics = linkedin.get_post_analytics()
     print("Scraped posts")
     with open("posts.csv", "w") as f:
         writer = csv.DictWriter(f, fieldnames=post_analytics[0].keys())
