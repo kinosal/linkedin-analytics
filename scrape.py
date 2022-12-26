@@ -8,6 +8,7 @@ import csv
 import os
 import tkinter
 from tkinter import messagebox
+from collections import Counter
 
 # Import from third party libraries
 from selenium import webdriver
@@ -20,15 +21,15 @@ import bs4
 class LinkedIn:
     loginname = os.getenv("LOGINNAME")  # LinkedIn login name
     password = os.getenv("PASSWORD")  # LinkedIn password
-    username = os.getenv("USERNAME")  # LinkedIn username to scrape posts from
 
     options = Options()
     options.add_argument("start-maximized")
     options.add_argument("disable-infobars")
     options.add_argument("--disable-extensions")
+    # Headless only works if no security verification is required
     # options.add_argument("--headless")
     # Fixed window size needed for scroll in headless mode
-    options.add_argument("window-size=1920,1080")
+    # options.add_argument("window-size=1920,1080")
     browser = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=options
     )
@@ -70,6 +71,7 @@ class LinkedIn:
         password_field = self.browser.find_element("id", "password")
         password_field.send_keys(self.password)
         password_field.submit()
+        time.sleep(1)
         if "security verification" in self.browser.title.lower():
             # Wait for 2-step verification to be completed
             self.messagebox(
@@ -111,9 +113,61 @@ class LinkedIn:
         time = datetime.datetime.fromtimestamp(int(binary_time, 2) / 1e3)
         return time.strftime("%Y-%m-%d %H:%M:%S")
 
-    def get_shown_post_analytics(self) -> list:
+    def extract_reactors(self, post_soup: bs4.element.Tag) -> list:
+        """Extract names of users who reacted to a post."""
+        # Open modal with reactors
+        post_div_id = post_soup.get("id")
+        button = self.browser.find_element("xpath", f"//div[@id='{post_div_id}']//button")
+        button.click()
+        time.sleep(1)
+
+        try:
+            modal = self.browser.find_element(
+                "xpath",
+                "//div[@class='artdeco-modal__content social-details-reactors-modal__content ember-view']",
+            )
+            modal_content = self.browser.find_element(
+                "xpath", "//div[@class='scaffold-finite-scroll__content']"
+            )
+        except Exception:
+            print("No modal found")
+
+        # Scroll to bottom of modal to load all reactors
+        last_modal_height = 0
+        new_modal_height = modal_content.get_attribute("scrollHeight")
+        while last_modal_height != new_modal_height:
+            last_modal_height = new_modal_height
+            self.browser.execute_script(
+                "arguments[0].scrollTop = arguments[0].scrollHeight", modal
+            )
+            time.sleep(1)
+            new_modal_height = modal_content.get_attribute("scrollHeight")
+
+        modal_soup = bs4.BeautifulSoup(
+            modal_content.get_attribute("innerHTML"), features="lxml"
+        )
+
+        # Extract names of reactors
+        reactor_names = []
+        for person in modal_soup.find_all(
+            "div", attrs={"class": "artdeco-entity-lockup__title ember-view"}
+        ):
+            name = person.find("span", attrs={"aria-hidden": "true"})
+            if name:
+                reactor_names.append(name.text)
+
+        # Close modal
+        close_button = self.browser.find_element(
+            "xpath", "//button[@aria-label='Dismiss']"
+        )
+        close_button.click()
+        time.sleep(1)
+
+        return reactor_names
+
+    def get_shown_post_analytics(self, include_reactors: bool = True) -> list:
         """Get analytics post HTML tags."""
-        soup = bs4.BeautifulSoup(linkedin.browser.page_source, features="lxml")
+        soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
         post_soups = soup.find_all(
             "div",
             attrs={"class": "social-details-social-activity update-v2-social-activity"},
@@ -131,7 +185,10 @@ class LinkedIn:
                     self.element_identifiers[tag_type]["tag"],
                     self.element_identifiers[tag_type]["attrs"],
                 )
+            if include_reactors:
+                tags["reactors"] = self.extract_reactors(post_soup)
             posts.append(tags)
+            print(f"Extracted analytics for {tags['url']}")
         return posts
 
     def show_more_posts(self):
@@ -143,7 +200,7 @@ class LinkedIn:
 
         # Scroll down to bottom and wait to load more posts on page
         self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(4)
+        time.sleep(1)
 
         # Calculate new scroll height and stop if at global bottom
         new_height = self.browser.execute_script("return document.body.scrollHeight")
@@ -154,29 +211,85 @@ class LinkedIn:
             self.last_height = new_height
             print("Scrolled to show more posts")
 
-    def get_post_analytics(self, since: str) -> list:
-        """Get analytics for all posts since the specified date."""
+    def get_post_analytics(
+            self, user: str, since: str, include_reactors: bool = True
+        ) -> list:
+        """Get analytics for all posts for a user since the specified date."""
+        # Load page with posts
         self.browser.get(
-            "https://www.linkedin.com/in/"
-            + self.username
-            + "/detail/recent-activity/shares/"
+            "https://www.linkedin.com/in/" + user + "/detail/recent-activity/shares/"
         )
-        post_analytics = linkedin.get_shown_post_analytics()
-        # TODO: Only extract time for checking if still greater than since
+        time.sleep(1)
+
+        # Scroll to bottom of page to load all posts from specified date
+        post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
         last_date = post_analytics[-1]["time"]
         while not self.global_bottom and last_date >= since:
             linkedin.show_more_posts()
-            post_analytics = linkedin.get_shown_post_analytics()
+            post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
             last_date = post_analytics[-1]["time"]
-        print("Scraped posts")
-        return [p for p in post_analytics if p["time"] >= since]
+
+        # Scroll back to top of page to start extracting analytics
+        self.browser.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1)
+
+        # Get analytics for all posts
+        if include_reactors:
+            post_analytics = linkedin.get_shown_post_analytics(include_reactors=True)
+        else:
+            post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
+        print("Scraped all posts")
+
+        return [p for p in post_analytics if p["time"] >= since]    
+
+    def add_post_hashtags(self, posts: list) -> list:
+        """Get hashtags for all posts."""
+        for post in posts:
+            url = (
+                "https://www.linkedin.com/feed/update/urn:li:activity:"
+                + post["url"].split(":")[-1]
+            )
+            self.browser.get(url)
+            time.sleep(1)
+            soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
+            post_text = soup.find(
+                "div",
+                attrs={"class": "update-components-text relative feed-shared-update-v2__commentary"},
+            ).text
+            post["hashtags"] = [h.lower() for h in re.findall(r"#(\w+)", post_text)]
+            print(f"Added hashtags for {url}")
+        print("Added all hashtags")
+        return posts
+
+    @staticmethod
+    def top_n(posts: list, tag: str, n: int = 10) -> list:
+        """Find top n tags, e.g. reactors or hashtags."""
+        tags = []
+        for post in posts:
+            tags.extend(post[tag])
+        counts = Counter(tags)
+        return counts.most_common(n)
 
 
 if __name__ == "__main__":
+    user = "nikolasschriefer"
+
     linkedin = LinkedIn()
     linkedin.login()
-    post_analytics = linkedin.get_post_analytics(since="2022-01-01")
-    with open("posts.csv", "w") as f:
+    post_analytics = linkedin.get_post_analytics(
+        user=user, since="2022-01-01", include_reactors=False
+    )
+    post_analytics = linkedin.add_post_hashtags(post_analytics)
+
+    if "reactors" in post_analytics[0].keys():
+        top_reactors = linkedin.top_n(post_analytics, "reactors", n=10)
+        print(top_reactors)
+
+    if "hashtags" in post_analytics[0].keys():
+        top_hashtags = linkedin.top_n(post_analytics, "hashtags", n=10)
+        print(top_hashtags)
+
+    with open(f"{user}_posts.csv", "w") as f:
         writer = csv.DictWriter(f, fieldnames=post_analytics[0].keys())
         writer.writeheader()
         writer.writerows(post_analytics)
