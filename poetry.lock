@@ -130,6 +130,19 @@ python-versions = ">=3.7"
 test = ["pytest (>=6)"]
 
 [[package]]
+name = "flake8"
+version = "6.0.0"
+description = "the modular source code checker: pep8 pyflakes and co"
+category = "dev"
+optional = false
+python-versions = ">=3.8.1"
+
+[package.dependencies]
+mccabe = ">=0.7.0,<0.8.0"
+pycodestyle = ">=2.10.0,<2.11.0"
+pyflakes = ">=3.0.0,<3.1.0"
+
+[[package]]
 name = "h11"
 version = "0.14.0"
 description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
@@ -158,6 +171,14 @@ cssselect = ["cssselect (>=0.7)"]
 html5 = ["html5lib"]
 htmlsoup = ["beautifulsoup4"]
 source = ["Cython (>=0.29.7)"]
+
+[[package]]
+name = "mccabe"
+version = "0.7.0"
+description = "McCabe checker, plugin for flake8"
+category = "dev"
+optional = false
+python-versions = ">=3.6"
 
 [[package]]
 name = "mypy-extensions"
@@ -221,6 +242,14 @@ description = "C parser in Python"
 category = "main"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
+
+[[package]]
+name = "pyflakes"
+version = "3.0.1"
+description = "passive checker of Python programs"
+category = "dev"
+optional = false
+python-versions = ">=3.6"
 
 [[package]]
 name = "pysocks"
@@ -296,6 +325,14 @@ description = "A modern CSS selector implementation for Beautiful Soup."
 category = "main"
 optional = false
 python-versions = ">=3.6"
+
+[[package]]
+name = "tk"
+version = "0.1.0"
+description = "TensorKit is a deep learning helper between Python and C++."
+category = "main"
+optional = false
+python-versions = "*"
 
 [[package]]
 name = "tomli"
@@ -397,7 +434,7 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "f127b2471666051e51327c8ec37c509f431ae7698e71ffba839d9a78c7223071"
+content-hash = "08507d112e98cf5f3fe2baf6cf252036ef12714493a236b83c0b0867fa4e60b1"
 
 [metadata.files]
 async-generator = []
@@ -411,9 +448,11 @@ charset-normalizer = []
 click = []
 colorama = []
 exceptiongroup = []
+flake8 = []
 h11 = []
 idna = []
 lxml = []
+mccabe = []
 mypy-extensions = []
 outcome = []
 packaging = []
@@ -421,6 +460,7 @@ pathspec = []
 platformdirs = []
 pycodestyle = []
 pycparser = []
+pyflakes = []
 pysocks = []
 python-dotenv = []
 requests = []
@@ -428,6 +468,7 @@ selenium = []
 sniffio = []
 sortedcontainers = []
 soupsieve = []
+tk = []
 tomli = []
 tqdm = []
 trio = []
