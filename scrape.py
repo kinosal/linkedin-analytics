@@ -6,6 +6,7 @@ import time
 import datetime
 import csv
 import os
+import argparse
 import tkinter
 from tkinter import messagebox
 from collections import Counter
@@ -37,6 +38,10 @@ class LinkedIn:
     global_bottom = False
 
     element_identifiers = {
+        "impressions": {
+            "tag": "span",
+            "attrs": {"class": "ca-entry-point__num-views t-14"},
+        },
         "reactions": {
             "tag": "li",
             "attrs": {
@@ -48,10 +53,6 @@ class LinkedIn:
             "attrs": {
                 "class": "social-details-social-counts__item social-details-social-counts__comments social-details-social-counts__item--with-social-proof"
             },
-        },
-        "impressions": {
-            "tag": "span",
-            "attrs": {"class": "ca-entry-point__num-views t-14"},
         },
     }
 
@@ -117,7 +118,9 @@ class LinkedIn:
         """Extract names of users who reacted to a post."""
         # Open modal with reactors
         post_div_id = post_soup.get("id")
-        button = self.browser.find_element("xpath", f"//div[@id='{post_div_id}']//button")
+        button = self.browser.find_element(
+            "xpath", f"//div[@id='{post_div_id}']//button"
+        )
         button.click()
         time.sleep(1)
 
@@ -186,7 +189,7 @@ class LinkedIn:
                     self.element_identifiers[tag_type]["attrs"],
                 )
             if include_reactors:
-                tags["reactors"] = self.extract_reactors(post_soup)
+                tags["reactors"] = self.extract_reactors(post_soup)  # Slow (see method)
             posts.append(tags)
             print(f"Extracted analytics for {tags['url']}")
         return posts
@@ -213,7 +216,7 @@ class LinkedIn:
 
     def get_post_analytics(
             self, user: str, since: str, include_reactors: bool = True
-        ) -> list:
+    ) -> list:
         """Get analytics for all posts for a user since the specified date."""
         # Load page with posts
         self.browser.get(
@@ -228,6 +231,7 @@ class LinkedIn:
             linkedin.show_more_posts()
             post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
             last_date = post_analytics[-1]["time"]
+        print("Scrolled to show all posts since specified date")
 
         # Scroll back to top of page to start extracting analytics
         self.browser.execute_script("window.scrollTo(0, 0);")
@@ -240,7 +244,7 @@ class LinkedIn:
             post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
         print("Scraped all posts")
 
-        return [p for p in post_analytics if p["time"] >= since]    
+        return [p for p in post_analytics if p["time"] >= since]
 
     def add_post_hashtags(self, posts: list) -> list:
         """Get hashtags for all posts."""
@@ -272,24 +276,30 @@ class LinkedIn:
 
 
 if __name__ == "__main__":
-    user = "nikolasschriefer"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--user", help="LinkedIn user to scrape", required=True)
+    parser.add_argument(
+        "--since", help="Date to start scraping from", default="2022-01-01"
+    )
+    parser.add_argument("--reactors", help="Include reactors?", default=True)
+    args = parser.parse_args()
 
     linkedin = LinkedIn()
     linkedin.login()
     post_analytics = linkedin.get_post_analytics(
-        user=user, since="2022-01-01", include_reactors=False
+        user=args.user, since=args.since, include_reactors=args.reactors
     )
     post_analytics = linkedin.add_post_hashtags(post_analytics)
 
-    if "reactors" in post_analytics[0].keys():
-        top_reactors = linkedin.top_n(post_analytics, "reactors", n=10)
-        print(top_reactors)
-
-    if "hashtags" in post_analytics[0].keys():
-        top_hashtags = linkedin.top_n(post_analytics, "hashtags", n=10)
-        print(top_hashtags)
-
-    with open(f"{user}_posts.csv", "w") as f:
+    with open(f"{args.user}_posts.csv", "w") as f:
         writer = csv.DictWriter(f, fieldnames=post_analytics[0].keys())
         writer.writeheader()
         writer.writerows(post_analytics)
+
+    if "reactors" in post_analytics[0].keys():
+        top_reactors = linkedin.top_n(post_analytics, "reactors", n=10)
+        print(f"Top reactors: {top_reactors}")
+
+    if "hashtags" in post_analytics[0].keys():
+        top_hashtags = linkedin.top_n(post_analytics, "hashtags", n=10)
+        print(f"Top hashtags: {top_hashtags}")
