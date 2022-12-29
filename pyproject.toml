@@ -12,6 +12,8 @@ bs4 = "^0.0.1"
 webdriver-manager = "^3.8.5"
 lxml = "^4.9.2"
 tk = "^0.1.0"
+streamlit = "^1.16.0"
+jupyter = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
 black = "^22.12.0"

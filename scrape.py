@@ -228,11 +228,11 @@ class LinkedInBrowser:
         time.sleep(1)
 
         # Scroll to bottom of page to load all posts from specified date
-        post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
+        post_analytics = self.get_shown_post_analytics(include_reactors=False)
         last_date = post_analytics[-1]["time"]
         while not self.global_bottom and last_date >= since:
-            linkedin.show_more_posts()
-            post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
+            self.show_more_posts()
+            post_analytics = self.get_shown_post_analytics(include_reactors=False)
             last_date = post_analytics[-1]["time"]
         print("Scrolled to show all posts since specified date")
 
@@ -242,9 +242,9 @@ class LinkedInBrowser:
 
         # Get analytics for all posts
         if include_reactors:
-            post_analytics = linkedin.get_shown_post_analytics(include_reactors=True)
+            post_analytics = self.get_shown_post_analytics(include_reactors=True)
         else:
-            post_analytics = linkedin.get_shown_post_analytics(include_reactors=False)
+            post_analytics = self.get_shown_post_analytics(include_reactors=False)
         print("Scraped all posts")
 
         return [p for p in post_analytics if p["time"] >= since]
