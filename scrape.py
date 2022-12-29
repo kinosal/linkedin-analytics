@@ -19,42 +19,45 @@ from webdriver_manager.chrome import ChromeDriverManager
 import bs4
 
 
-class LinkedIn:
-    loginname = os.getenv("LOGINNAME")  # LinkedIn login name
-    password = os.getenv("PASSWORD")  # LinkedIn password
+class LinkedInBrowser:
+    def __init__(self, headless: bool) -> None:
+        self.loginname = os.getenv("LOGINNAME")  # LinkedIn login name
+        self.password = os.getenv("PASSWORD")  # LinkedIn password
 
-    options = Options()
-    options.add_argument("start-maximized")
-    options.add_argument("disable-infobars")
-    options.add_argument("--disable-extensions")
-    # Headless only works if no security verification is required
-    # options.add_argument("--headless")
-    # Fixed window size needed for scroll in headless mode
-    # options.add_argument("window-size=1920,1080")
-    browser = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=options
-    )
-    # Indicate if global bottom of page is reached, i.e. there are no more posts to show
-    global_bottom = False
+        options = Options()
+        options.add_argument("start-maximized")
+        options.add_argument("disable-infobars")
+        options.add_argument("--disable-extensions")
+        if headless:
+            # Headless only works if no security verification is required
+            options.add_argument("--headless")
+            # Fixed window size needed for scroll in headless mode
+            options.add_argument("window-size=1920,1080")
+        self.browser = webdriver.Chrome(
+            service=Service(ChromeDriverManager().install()), options=options
+        )
+        # Indicate if global bottom of page is reached,
+        # i.e. there are no more posts to show
+        self.global_bottom = False
 
-    element_identifiers = {
-        "impressions": {
-            "tag": "span",
-            "attrs": {"class": "ca-entry-point__num-views t-14"},
-        },
-        "reactions": {
-            "tag": "li",
-            "attrs": {
-                "class": "social-details-social-counts__item social-details-social-counts__reactions social-details-social-counts__reactions--with-social-proof"
+        self.element_identifiers = {
+            "impressions": {
+                "tag": "span",
+                "attrs": {"class": "ca-entry-point__num-views t-14"},
             },
-        },
-        "comments": {
-            "tag": "li",
-            "attrs": {
-                "class": "social-details-social-counts__item social-details-social-counts__comments social-details-social-counts__item--with-social-proof"
+            "reactions": {
+                "tag": "li",
+                "attrs": {
+                    "class": "social-details-social-counts__item social-details-social-counts__reactions social-details-social-counts__reactions--with-social-proof"
+                },
             },
-        },
-    }
+            "comments": {
+                "tag": "li",
+                "attrs": {
+                    "class": "social-details-social-counts__item social-details-social-counts__comments social-details-social-counts__item--with-social-proof"
+                },
+            },
+        }
 
     @staticmethod
     def messagebox(title, message):
@@ -282,9 +285,10 @@ if __name__ == "__main__":
         "--since", help="Date to start scraping from", default="2022-01-01"
     )
     parser.add_argument("--reactors", help="Include reactors?", default=True)
+    parser.add_argument("--headless", help="Run headless browser?", default=False)
     args = parser.parse_args()
 
-    linkedin = LinkedIn()
+    linkedin = LinkedInBrowser(headless=args.headless)
     linkedin.login()
     post_analytics = linkedin.get_post_analytics(
         user=args.user, since=args.since, include_reactors=args.reactors
