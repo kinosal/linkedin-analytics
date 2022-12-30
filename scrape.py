@@ -8,6 +8,7 @@ import csv
 import os
 import argparse
 import tkinter
+import sys
 from tkinter import messagebox
 from collections import Counter
 
@@ -15,27 +16,31 @@ from collections import Counter
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions
 from webdriver_manager.chrome import ChromeDriverManager
 import bs4
 
 
 class LinkedInBrowser:
     def __init__(self, headless: bool) -> None:
-        self.loginname = os.getenv("LOGINNAME")  # LinkedIn login name
-        self.password = os.getenv("PASSWORD")  # LinkedIn password
-
         options = Options()
-        options.add_argument("start-maximized")
-        options.add_argument("disable-infobars")
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-infobars")
         options.add_argument("--disable-extensions")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
         if headless:
-            # Headless only works if no security verification is required
+            self.headless = True
             options.add_argument("--headless")
-            # Fixed window size needed for scroll in headless mode
+            # Fixed window size needed to scroll in headless mode
             options.add_argument("window-size=1920,1080")
-        self.browser = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()), options=options
-        )
+        if "google.colab" in sys.modules:  # Use installed chromedriver in Google Colab
+            self.browser = webdriver.Chrome("chromedriver", options=options)
+        else:
+            self.browser = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()), options=options
+            )
         # Indicate if global bottom of page is reached,
         # i.e. there are no more posts to show
         self.global_bottom = False
@@ -67,21 +72,33 @@ class LinkedInBrowser:
         messagebox.showinfo(title, message)
         root.update()
 
-    def login(self):
+    def login(self, loginname: str = None, password: str = None):
         """Login to LinkedIn with Selenium."""
+        loginname = loginname or os.getenv("LOGINNAME")
+        password = password or os.getenv("PASSWORD")
         self.browser.get("https://www.linkedin.com/login")
         user_field = self.browser.find_element("id", "username")
-        user_field.send_keys(self.loginname)
+        user_field.send_keys(loginname)
         password_field = self.browser.find_element("id", "password")
-        password_field.send_keys(self.password)
+        password_field.send_keys(password)
         password_field.submit()
         time.sleep(1)
         if "security verification" in self.browser.title.lower():
-            # Wait for 2-step verification to be completed
-            self.messagebox(
-                title="Security verification",
-                message="Finish 2-step verification in browser, then click OK.",
+            if self.headless:
+                raise Exception(
+                    "Security verification cannot be completed in headless browser."
+                )
+            # Wait for 2-step verification and login to be completed,
+            # i.e. the feed page to be loaded
+            # TODO: WebDriverWait has not been tested since
+            # the 2-step verification has not shown recently
+            WebDriverWait(self.browser, 600).until(
+                expected_conditions.title_is("Feed | LinkedIn")
             )
+            # self.messagebox(
+            #     title="Security verification",
+            #     message="Finish 2-step verification in browser, then click OK.",
+            # )
         print("Logged in")
 
     @staticmethod
@@ -218,7 +235,7 @@ class LinkedInBrowser:
             print("Scrolled to show more posts")
 
     def get_post_analytics(
-            self, user: str, since: str, include_reactors: bool = True
+        self, user: str, since: str, include_reactors: bool = True
     ) -> list:
         """Get analytics for all posts for a user since the specified date."""
         # Load page with posts
@@ -261,7 +278,9 @@ class LinkedInBrowser:
             soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
             post_text = soup.find(
                 "div",
-                attrs={"class": "update-components-text relative feed-shared-update-v2__commentary"},
+                attrs={
+                    "class": "update-components-text relative feed-shared-update-v2__commentary"
+                },
             ).text
             post["hashtags"] = [h.lower() for h in re.findall(r"#(\w+)", post_text)]
             print(f"Added hashtags for {url}")
@@ -286,6 +305,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--reactors", help="Include reactors?", default=True)
     parser.add_argument("--headless", help="Run headless browser?", default=False)
+    # Headless needs to be True to solve potential LinkedIn security verification
     args = parser.parse_args()
 
     linkedin = LinkedInBrowser(headless=args.headless)
