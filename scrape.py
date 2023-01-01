@@ -25,11 +25,11 @@ import bs4
 class LinkedInBrowser:
     def __init__(self, headless: bool) -> None:
         options = Options()
-        options.add_argument("--start-maximized")
-        options.add_argument("--disable-infobars")
-        options.add_argument("--disable-extensions")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
+        # options.add_argument("--start-maximized")
+        # options.add_argument("--disable-infobars")
+        # options.add_argument("--disable-extensions")
+        # options.add_argument("--no-sandbox")
+        # options.add_argument("--disable-dev-shm-usage")
         if headless:
             self.headless = True
             options.add_argument("--headless")
@@ -46,7 +46,19 @@ class LinkedInBrowser:
         self.global_bottom = False
 
         self.element_identifiers = {
-            "impressions": {
+            "post": {
+                "tag": "div",
+                "attrs": {
+                    "class": re.compile(
+                        ".*feed-shared-update-v2 feed-shared-update-v2--minimal-padding.*"
+                    )
+                },
+            },
+            "analytics": {
+                "tag": "div",
+                "attrs": {"class": "social-details-social-activity update-v2-social-activity"},
+            },
+            "impressions": {  # only available for post by the logged in user
                 "tag": "span",
                 "attrs": {"class": "ca-entry-point__num-views t-14"},
             },
@@ -101,6 +113,40 @@ class LinkedInBrowser:
             # )
         print("Logged in")
 
+    def extract(self, post_soup: bs4.element.Tag, tag: str):
+        if tag == "urn":
+            return self.extract_urn(post_soup)
+        elif tag == "time":
+            return self.extract_time(post_soup)
+        elif tag == "impressions":
+            return self.extract_count(
+                post_soup, **self.element_identifiers["impressions"]
+            )
+        elif tag == "reactions":
+            return self.extract_count(
+                post_soup, **self.element_identifiers["reactions"]
+            )
+        elif tag == "comments":
+            return self.extract_count(post_soup, **self.element_identifiers["comments"])
+        elif tag == "reactors":
+            return self.extract_reactors(post_soup)
+        elif tag == "hashtags":
+            return self.extract_hashtags(post_soup)
+
+    @staticmethod
+    def extract_urn(post_soup: bs4.element.Tag) -> str:
+        """Extract URL from a post HTML tag."""
+        return post_soup.get("data-urn")
+
+    @staticmethod
+    def extract_time(post_soup: bs4.element.Tag) -> str:
+        """Extract time from a post HTML tag, using the post ID."""
+        urn = post_soup.get("data-urn")
+        post_id = urn[-19:]
+        binary_time = format(int(post_id), "b")[:41]
+        time = datetime.datetime.fromtimestamp(int(binary_time, 2) / 1e3)
+        return time.strftime("%Y-%m-%d %H:%M:%S")
+
     @staticmethod
     def extract_count(post_soup: bs4.element.Tag, tag: str, attrs: dict) -> int:
         """Extract number from a post HTML tag."""
@@ -115,31 +161,16 @@ class LinkedInBrowser:
             return int(without_comma) + 1
         return int(without_comma)
 
-    @staticmethod
-    def extract_url(post_soup: bs4.element.Tag) -> str:
-        """Extract URL from a post HTML tag."""
-        div = post_soup.find("div", attrs={"class": "content-analytics-entry-point"})
-        if not div:
-            return ""
-        return "https://www.linkedin.com" + div.find("a").get("href")
-
-    @staticmethod
-    def extract_time(post_soup: bs4.element.Tag) -> str:
-        """Extract time from a post HTML tag, using the post ID."""
-        div = post_soup.find("div", attrs={"class": "content-analytics-entry-point"})
-        if not div:
-            return ""
-        post_id = div.find("a").get("href")[-20:-1]
-        binary_time = format(int(post_id), "b")[:41]
-        time = datetime.datetime.fromtimestamp(int(binary_time, 2) / 1e3)
-        return time.strftime("%Y-%m-%d %H:%M:%S")
-
     def extract_reactors(self, post_soup: bs4.element.Tag) -> list:
         """Extract names of users who reacted to a post."""
         # Open modal with reactors
-        post_div_id = post_soup.get("id")
+        analytics_soup = post_soup.find(
+            self.element_identifiers["analytics"]["tag"],
+            attrs=self.element_identifiers["analytics"]["attrs"],
+        )
+        div_id = analytics_soup.get("id")
         button = self.browser.find_element(
-            "xpath", f"//div[@id='{post_div_id}']//button"
+            "xpath", f"//div[@id='{div_id}']//button"
         )
         button.click()
         time.sleep(1)
@@ -188,30 +219,41 @@ class LinkedInBrowser:
 
         return reactor_names
 
-    def get_shown_post_analytics(self, include_reactors: bool = True) -> list:
+    def extract_hashtags(self, post_urn: str) -> list:
+        """Get hashtags for post."""
+        self.browser.get("https://www.linkedin.com/feed/update/" + post_urn)
+        time.sleep(1)
+        soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
+        post_text = soup.find(
+            "div",
+            attrs={
+                "class": "update-components-text relative feed-shared-update-v2__commentary"
+            },
+        ).text
+        hashtags = [h.lower() for h in re.findall(r"#(\w+)", post_text)]
+        print(f"Extracted hashtags for {post_urn}")
+        return hashtags
+
+    def get_shown_post_analytics(self, include: list) -> list:
         """Get analytics post HTML tags."""
         soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
         post_soups = soup.find_all(
-            "div",
-            attrs={"class": "social-details-social-activity update-v2-social-activity"},
+            self.element_identifiers["post"]["tag"],
+            attrs=self.element_identifiers["post"]["attrs"],
         )
         posts = []
         for post_soup in post_soups:
             tags = {}
-            tags["url"] = self.extract_url(post_soup)
-            if not tags["url"]:
-                continue
-            tags["time"] = self.extract_time(post_soup)
-            for tag_type in self.element_identifiers:
-                tags[tag_type] = self.extract_count(
-                    post_soup,
-                    self.element_identifiers[tag_type]["tag"],
-                    self.element_identifiers[tag_type]["attrs"],
-                )
-            if include_reactors:
-                tags["reactors"] = self.extract_reactors(post_soup)  # Slow (see method)
+            for tag_type in [t for t in include if not t == "hashtags"]:
+                tags[tag_type] = self.extract(post_soup, tag_type)
             posts.append(tags)
-            print(f"Extracted analytics for {tags['url']}")
+            if "urn" in tags:
+                print(f"Extracted analytics for {tags['urn']}")
+        # Hashtags are not shown on the page and need to be extracted separately
+        # for reactors to be extractable by interacting with the browser
+        if "hashtags" in include:
+            for post in posts:
+                post["hashtags"] = self.extract_hashtags(post["urn"])
         return posts
 
     def show_more_posts(self):
@@ -235,57 +277,40 @@ class LinkedInBrowser:
             print("Scrolled to show more posts")
 
     def get_post_analytics(
-        self, user: str, since: str, include_reactors: bool = True
+        self,
+        user: str,
+        since: str,
+        include: list = ["urn", "time", "impressions", "reactions", "comments"],
     ) -> list:
         """Get analytics for all posts for a user since the specified date."""
         # Load page with posts
         self.browser.get(
-            "https://www.linkedin.com/in/" + user + "/detail/recent-activity/shares/"
+            "https://www.linkedin.com/in/" + user + "/recent-activity/shares/"
         )
         time.sleep(1)
 
         # Scroll to bottom of page to load all posts from specified date
-        post_analytics = self.get_shown_post_analytics(include_reactors=False)
+        post_analytics = self.get_shown_post_analytics(include=["time"])
+        if not post_analytics:
+            print("No posts found")
+            return []
+
         last_date = post_analytics[-1]["time"]
         while not self.global_bottom and last_date >= since:
             self.show_more_posts()
-            post_analytics = self.get_shown_post_analytics(include_reactors=False)
+            post_analytics = self.get_shown_post_analytics(include=["time"])
             last_date = post_analytics[-1]["time"]
         print("Scrolled to show all posts since specified date")
 
         # Scroll back to top of page to start extracting analytics
         self.browser.execute_script("window.scrollTo(0, 0);")
-        time.sleep(1)
+        time.sleep(2)
 
         # Get analytics for all posts
-        if include_reactors:
-            post_analytics = self.get_shown_post_analytics(include_reactors=True)
-        else:
-            post_analytics = self.get_shown_post_analytics(include_reactors=False)
+        post_analytics = self.get_shown_post_analytics(include=include)
         print("Scraped all posts")
 
         return [p for p in post_analytics if p["time"] >= since]
-
-    def add_post_hashtags(self, posts: list) -> list:
-        """Get hashtags for all posts."""
-        for post in posts:
-            url = (
-                "https://www.linkedin.com/feed/update/urn:li:activity:"
-                + post["url"].split(":")[-1]
-            )
-            self.browser.get(url)
-            time.sleep(1)
-            soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
-            post_text = soup.find(
-                "div",
-                attrs={
-                    "class": "update-components-text relative feed-shared-update-v2__commentary"
-                },
-            ).text
-            post["hashtags"] = [h.lower() for h in re.findall(r"#(\w+)", post_text)]
-            print(f"Added hashtags for {url}")
-        print("Added all hashtags")
-        return posts
 
     @staticmethod
     def top_n(posts: list, tag: str, n: int = 10) -> list:
@@ -303,27 +328,32 @@ if __name__ == "__main__":
     parser.add_argument(
         "--since", help="Date to start scraping from", default="2022-01-01"
     )
-    parser.add_argument("--reactors", help="Include reactors?", default=True)
-    parser.add_argument("--headless", help="Run headless browser?", default=False)
+    parser.add_argument("--reactors", help="Include reactors?", default=False)
+    parser.add_argument("--hashtags", help="Include hashtags?", default=False)
+    parser.add_argument("--headless", help="Run headless browser?", default=True)
     # Headless needs to be True to solve potential LinkedIn security verification
     args = parser.parse_args()
+    include = ["urn", "time", "impressions", "reactions", "comments"]
+    if args.reactors:
+        include.extend(["reactors"])
+    if args.hashtags:
+        include.extend(["hashtags"])
 
     linkedin = LinkedInBrowser(headless=args.headless)
     linkedin.login()
     post_analytics = linkedin.get_post_analytics(
-        user=args.user, since=args.since, include_reactors=args.reactors
+        user=args.user, since=args.since, include=include
     )
-    post_analytics = linkedin.add_post_hashtags(post_analytics)
+    if post_analytics:
+        with open(f"{args.user}_posts.csv", "w") as f:
+            writer = csv.DictWriter(f, fieldnames=post_analytics[0].keys())
+            writer.writeheader()
+            writer.writerows(post_analytics)
 
-    with open(f"{args.user}_posts.csv", "w") as f:
-        writer = csv.DictWriter(f, fieldnames=post_analytics[0].keys())
-        writer.writeheader()
-        writer.writerows(post_analytics)
+        if "reactors" in post_analytics[0].keys():
+            top_reactors = linkedin.top_n(post_analytics, "reactors", n=10)
+            print(f"Top reactors: {top_reactors}")
 
-    if "reactors" in post_analytics[0].keys():
-        top_reactors = linkedin.top_n(post_analytics, "reactors", n=10)
-        print(f"Top reactors: {top_reactors}")
-
-    if "hashtags" in post_analytics[0].keys():
-        top_hashtags = linkedin.top_n(post_analytics, "hashtags", n=10)
-        print(f"Top hashtags: {top_hashtags}")
+        if "hashtags" in post_analytics[0].keys():
+            top_hashtags = linkedin.top_n(post_analytics, "hashtags", n=10)
+            print(f"Top hashtags: {top_hashtags}")
