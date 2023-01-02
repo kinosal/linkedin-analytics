@@ -19,6 +19,7 @@ jupyter = "^1.0"
 black = "^22.12"
 pycodestyle = "^2.10"
 flake8 = "^6.0"
+watchdog = "^2.2.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
