@@ -7,9 +7,10 @@ import datetime
 import csv
 import os
 import argparse
-import tkinter
 import sys
-from tkinter import messagebox
+# tk does not work remotely on Streamlit
+# import tkinter
+# from tkinter import messagebox
 from collections import Counter
 
 # Import from third party libraries
@@ -73,13 +74,13 @@ class LinkedInBrowser:
             },
         }
 
-    @staticmethod
-    def messagebox(title, message):
-        """Show a message box to highlight required user input."""
-        root = tkinter.Tk()
-        root.withdraw()
-        messagebox.showinfo(title, message)
-        root.update()
+    # @staticmethod
+    # def messagebox(title, message):
+    #     """Show a message box to highlight required user input."""
+    #     root = tkinter.Tk()
+    #     root.withdraw()
+    #     messagebox.showinfo(title, message)
+    #     root.update()
 
     def login(self, loginname: str = None, password: str = None):
         """Login to LinkedIn with Selenium."""

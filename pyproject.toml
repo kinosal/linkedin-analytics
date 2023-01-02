@@ -11,9 +11,12 @@ selenium = "^4.7"
 bs4 = "^0.0"
 webdriver-manager = "^3.8"
 lxml = "^4.9"
-tk = "^0.1"
 streamlit = "^1.16"
 jupyter = "^1.0"
+tk = {version = "^0.1", optional = true}
+
+[tool.poetry.extras]
+tk = ["tk"]
 
 [tool.poetry.dev-dependencies]
 black = "^22.12"
