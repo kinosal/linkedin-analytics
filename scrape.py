@@ -25,14 +25,9 @@ import bs4
 class LinkedInBrowser:
     def __init__(self, headless: bool) -> None:
         options = Options()
-        # options.add_argument("--start-maximized")
-        # options.add_argument("--disable-infobars")
-        # options.add_argument("--disable-extensions")
-        # options.add_argument("--no-sandbox")
-        # options.add_argument("--disable-dev-shm-usage")
         if headless:
             self.headless = True
-            options.add_argument("--headless")
+            options.add_argument("headless")
             # Fixed window size needed to scroll in headless mode
             options.add_argument("window-size=1920,1080")
         if "google.colab" in sys.modules:  # Use installed chromedriver in Google Colab
@@ -56,7 +51,9 @@ class LinkedInBrowser:
             },
             "analytics": {
                 "tag": "div",
-                "attrs": {"class": "social-details-social-activity update-v2-social-activity"},
+                "attrs": {
+                    "class": "social-details-social-activity update-v2-social-activity"
+                },
             },
             "impressions": {  # only available for post by the logged in user
                 "tag": "span",
@@ -107,6 +104,7 @@ class LinkedInBrowser:
             WebDriverWait(self.browser, 600).until(
                 expected_conditions.title_is("Feed | LinkedIn")
             )
+            # Alternative: Show message box to explicitly finish 2-step verification
             # self.messagebox(
             #     title="Security verification",
             #     message="Finish 2-step verification in browser, then click OK.",
@@ -114,6 +112,7 @@ class LinkedInBrowser:
         print("Logged in")
 
     def extract(self, post_soup: bs4.element.Tag, tag: str):
+        """Point to various methods to extract data from a post HTML tag."""
         if tag == "urn":
             return self.extract_urn(post_soup)
         elif tag == "time":
@@ -132,6 +131,8 @@ class LinkedInBrowser:
             return self.extract_reactors(post_soup)
         elif tag == "hashtags":
             return self.extract_hashtags(post_soup)
+        else:
+            raise Exception(f"Unknown tag: {tag}")
 
     @staticmethod
     def extract_urn(post_soup: bs4.element.Tag) -> str:
@@ -169,9 +170,7 @@ class LinkedInBrowser:
             attrs=self.element_identifiers["analytics"]["attrs"],
         )
         div_id = analytics_soup.get("id")
-        button = self.browser.find_element(
-            "xpath", f"//div[@id='{div_id}']//button"
-        )
+        button = self.browser.find_element("xpath", f"//div[@id='{div_id}']//button")
         button.click()
         time.sleep(1)
 
@@ -280,6 +279,7 @@ class LinkedInBrowser:
         self,
         user: str,
         since: str,
+        until: str = None,
         include: list = ["urn", "time", "impressions", "reactions", "comments"],
     ) -> list:
         """Get analytics for all posts for a user since the specified date."""
@@ -310,7 +310,7 @@ class LinkedInBrowser:
         post_analytics = self.get_shown_post_analytics(include=include)
         print("Scraped all posts")
 
-        return [p for p in post_analytics if p["time"] >= since]
+        return [p for p in post_analytics if p["time"] >= since and p["time"] <= until]
 
     @staticmethod
     def top_n(posts: list, tag: str, n: int = 10) -> list:
@@ -325,9 +325,8 @@ class LinkedInBrowser:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--user", help="LinkedIn user to scrape", required=True)
-    parser.add_argument(
-        "--since", help="Date to start scraping from", default="2022-01-01"
-    )
+    parser.add_argument("--since", help="First date to scrape", default="2022-01-01")
+    parser.add_argument("--until", help="Last date to scrape", default="2023-01-01")
     parser.add_argument("--reactors", help="Include reactors?", default=False)
     parser.add_argument("--hashtags", help="Include hashtags?", default=False)
     parser.add_argument("--headless", help="Run headless browser?", default=True)
@@ -342,7 +341,7 @@ if __name__ == "__main__":
     linkedin = LinkedInBrowser(headless=args.headless)
     linkedin.login()
     post_analytics = linkedin.get_post_analytics(
-        user=args.user, since=args.since, include=include
+        user=args.user, since=args.since, until=args.until, include=include
     )
     if post_analytics:
         with open(f"{args.user}_posts.csv", "w") as f:

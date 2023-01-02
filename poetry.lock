@@ -1732,7 +1732,7 @@ test = ["pytest (>=2.2.3)", "flake8 (>=2.4.0)", "isort (>=4.2.2)"]
 
 [[package]]
 name = "watchdog"
-version = "2.2.0"
+version = "2.2.1"
 description = "Filesystem events monitoring"
 category = "main"
 optional = false
@@ -1826,7 +1826,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "flake8 (<5)", "pytest-co
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "d95ecf91864f46358da3c68772b917cf456485c1153e7743ffce98a4b0052639"
+content-hash = "79e3c9c0d1ac4279d7893293822df2fa425244cc206b5dcd50ca297a26d29ba7"
 
 [metadata.files]
 altair = []
