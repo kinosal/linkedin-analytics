@@ -356,4 +356,15 @@ if __name__ == "__main__":
 
         if "hashtags" in post_analytics[0].keys():
             top_hashtags = linkedin.top_n(post_analytics, "hashtags", n=10)
-            print(f"Top hashtags: {top_hashtags}")
+            print(f"Most used hashtags: {top_hashtags}")
+
+            hashtag_reactions = {}
+            for post in post_analytics:
+                for hashtag in post["hashtags"]:
+                    if hashtag not in hashtag_reactions:
+                        hashtag_reactions[hashtag] = 0
+                    hashtag_reactions[hashtag] += post["reactions"]
+            top_hashtag_reactions = sorted(
+                hashtag_reactions.items(), key=lambda x: x[1], reverse=True
+            )[:10]
+            print(f"Top hashtags by reactions: {top_hashtag_reactions}")
