@@ -15,6 +15,12 @@ Additionally, the script scrapes the reactors for each of the specified user's t
 3. Run the script with `poetry run python scrape.py --user <username>`
 4. Optionally specify
     - `--since` as the date to scrape posts from (defaults to `2022-01-01`),
-    - `--reactors` to also scrape the reactors for each post (defaults to `True`)
-    - `--headless` to run the script without a browser window (defaults to `False`, requires `True` to solve the login verification challenge)
+    - `--until` as the date to scrape posts until (defaults to `2023-01-01`),
+    - `--reactors` to also scrape the reactors for each post (defaults to `False`)
+    - `--hashtags` to also scrape the hashtags for each post (defaults to `False`)
+    - `--headless` to run the script without a browser window (defaults to `True`, requires `True` to solve the login verification challenge)
 5. Complete the login verification challenge if prompted
+
+## Issues
+
+I tried to run the script remotely using `notebook.ipynb`on [Google Colab](https://colab.research.google.com) and `app.py` on [Streamlit](https://streamlit.io). However, LinkedIn asks for a security verification on both environments and they don't support running a headful Selenium browser to manually solve it. If you have any ideas on how to get around this, please let me know.
