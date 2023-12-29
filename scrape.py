@@ -8,6 +8,7 @@ import csv
 import os
 import argparse
 import sys
+
 # tk does not work remotely on Streamlit
 # import tkinter
 # from tkinter import messagebox
@@ -31,6 +32,8 @@ class LinkedInBrowser:
             options.add_argument("headless")
             # Fixed window size needed to scroll in headless mode
             options.add_argument("window-size=1920,1080")
+        else:
+            self.headless = False
         if "google.colab" in sys.modules:  # Use installed chromedriver in Google Colab
             self.browser = webdriver.Chrome("chromedriver", options=options)
         else:
@@ -53,7 +56,7 @@ class LinkedInBrowser:
             "analytics": {
                 "tag": "div",
                 "attrs": {
-                    "class": "social-details-social-activity update-v2-social-activity"
+                    "class": "update-v2-social-activity"
                 },
             },
             "impressions": {  # only available for post by the logged in user
@@ -63,13 +66,13 @@ class LinkedInBrowser:
             "reactions": {
                 "tag": "li",
                 "attrs": {
-                    "class": "social-details-social-counts__item social-details-social-counts__reactions social-details-social-counts__reactions--with-social-proof"
+                    "class": "social-details-social-counts__reactions"
                 },
             },
             "comments": {
                 "tag": "li",
                 "attrs": {
-                    "class": "social-details-social-counts__item social-details-social-counts__comments social-details-social-counts__item--with-social-proof"
+                    "class": "social-details-social-counts__comments"
                 },
             },
         }
@@ -100,10 +103,8 @@ class LinkedInBrowser:
                 )
             # Wait for 2-step verification and login to be completed,
             # i.e. the feed page to be loaded
-            # TODO: WebDriverWait has not been tested since
-            # the 2-step verification has not shown recently
             WebDriverWait(self.browser, 600).until(
-                expected_conditions.title_is("Feed | LinkedIn")
+                expected_conditions.title_contains("Feed | LinkedIn")
             )
             # Alternative: Show message box to explicitly finish 2-step verification
             # self.messagebox(
@@ -127,7 +128,9 @@ class LinkedInBrowser:
                 post_soup, **self.element_identifiers["reactions"]
             )
         elif tag == "comments":
-            return self.extract_count(post_soup, **self.element_identifiers["comments"])
+            return self.extract_count(
+                post_soup, **self.element_identifiers["comments"]
+            )
         elif tag == "reactors":
             return self.extract_reactors(post_soup)
         elif tag == "hashtags":
@@ -183,51 +186,53 @@ class LinkedInBrowser:
             modal_content = self.browser.find_element(
                 "xpath", "//div[@class='scaffold-finite-scroll__content']"
             )
+
+            # Scroll to bottom of modal to load all reactors
+            last_modal_height = 0
+            new_modal_height = modal_content.get_attribute("scrollHeight")
+            while last_modal_height != new_modal_height:
+                last_modal_height = new_modal_height
+                self.browser.execute_script(
+                    "arguments[0].scrollTop = arguments[0].scrollHeight", modal
+                )
+                time.sleep(1)
+                new_modal_height = modal_content.get_attribute("scrollHeight")
+
+            modal_soup = bs4.BeautifulSoup(
+                modal_content.get_attribute("innerHTML"), features="lxml"
+            )
+
+            # Extract names of reactors
+            reactor_names = []
+            for person in modal_soup.find_all(
+                "div", attrs={"class": "artdeco-entity-lockup__title ember-view"}
+            ):
+                name = person.find("span", attrs={"aria-hidden": "true"})
+                if name:
+                    reactor_names.append(name.text)
+
+            # Close modal
+            close_button = self.browser.find_element(
+                "xpath", "//button[@aria-label='Dismiss']"
+            )
+            close_button.click()
+            time.sleep(1)
+
+            return reactor_names
+
         except Exception:
             print("No modal found")
-
-        # Scroll to bottom of modal to load all reactors
-        last_modal_height = 0
-        new_modal_height = modal_content.get_attribute("scrollHeight")
-        while last_modal_height != new_modal_height:
-            last_modal_height = new_modal_height
-            self.browser.execute_script(
-                "arguments[0].scrollTop = arguments[0].scrollHeight", modal
-            )
-            time.sleep(1)
-            new_modal_height = modal_content.get_attribute("scrollHeight")
-
-        modal_soup = bs4.BeautifulSoup(
-            modal_content.get_attribute("innerHTML"), features="lxml"
-        )
-
-        # Extract names of reactors
-        reactor_names = []
-        for person in modal_soup.find_all(
-            "div", attrs={"class": "artdeco-entity-lockup__title ember-view"}
-        ):
-            name = person.find("span", attrs={"aria-hidden": "true"})
-            if name:
-                reactor_names.append(name.text)
-
-        # Close modal
-        close_button = self.browser.find_element(
-            "xpath", "//button[@aria-label='Dismiss']"
-        )
-        close_button.click()
-        time.sleep(1)
-
-        return reactor_names
+            return []
 
     def extract_hashtags(self, post_urn: str) -> list:
         """Get hashtags for post."""
         self.browser.get("https://www.linkedin.com/feed/update/" + post_urn)
-        time.sleep(1)
+        time.sleep(4)
         soup = bs4.BeautifulSoup(self.browser.page_source, features="lxml")
         post_text = soup.find(
             "div",
             attrs={
-                "class": "update-components-text relative feed-shared-update-v2__commentary"
+                "class": "update-components-text relative update-components-update-v2__commentary"
             },
         ).text
         hashtags = [h.lower() for h in re.findall(r"#(\w+)", post_text)]
@@ -241,6 +246,9 @@ class LinkedInBrowser:
             self.element_identifiers["post"]["tag"],
             attrs=self.element_identifiers["post"]["attrs"],
         )
+        print(f"Found {len(post_soups)} posts")
+        time.sleep(1)
+
         posts = []
         for post_soup in post_soups:
             tags = {}
@@ -249,6 +257,8 @@ class LinkedInBrowser:
             posts.append(tags)
             if "urn" in tags:
                 print(f"Extracted analytics for {tags['urn']}")
+                time.sleep(1)
+
         # Hashtags are not shown on the page and need to be extracted separately
         # for reactors to be extractable by interacting with the browser
         if "hashtags" in include:
@@ -264,7 +274,13 @@ class LinkedInBrowser:
         )
 
         # Scroll down to bottom and wait to load more posts on page
-        self.browser.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        self.browser.execute_script(f"window.scrollTo(0, {self.last_height - 1500});")
+        time.sleep(1)
+        self.browser.execute_script(f"window.scrollTo(0, {self.last_height - 1000});")
+        time.sleep(1)
+        self.browser.execute_script(f"window.scrollTo(0, {self.last_height - 500});")
+        time.sleep(1)
+        self.browser.execute_script(f"window.scrollTo(0, {self.last_height});")
         time.sleep(1)
 
         # Calculate new scroll height and stop if at global bottom
@@ -288,7 +304,7 @@ class LinkedInBrowser:
         self.browser.get(
             "https://www.linkedin.com/in/" + user + "/recent-activity/shares/"
         )
-        time.sleep(1)
+        time.sleep(6)
 
         # Scroll to bottom of page to load all posts from specified date
         post_analytics = self.get_shown_post_analytics(include=["time"])
@@ -326,12 +342,12 @@ class LinkedInBrowser:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--user", help="LinkedIn user to scrape", required=True)
-    parser.add_argument("--since", help="First date to scrape", default="2022-01-01")
-    parser.add_argument("--until", help="Last date to scrape", default="2023-01-01")
+    parser.add_argument("--since", help="First date to scrape", default="2023-01-01")
+    parser.add_argument("--until", help="Last date to scrape", default="2024-01-01")
     parser.add_argument("--reactors", help="Include reactors?", default=False)
     parser.add_argument("--hashtags", help="Include hashtags?", default=False)
     parser.add_argument("--headless", help="Run headless browser?", default=True)
-    # Headless needs to be True to solve potential LinkedIn security verification
+    # Headless needs to be False to solve potential LinkedIn security verification
     args = parser.parse_args()
     include = ["urn", "time", "impressions", "reactions", "comments"]
     if args.reactors:

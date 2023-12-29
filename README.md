@@ -8,17 +8,17 @@ Additionally, the script scrapes the reactors for each of the specified user's t
 
 ## Usage
 
-1. Install dependencies using [Poetry](https://github.com/python-poetry/poetry) with `poetry install` (using Python 3.10)
+1. Install dependencies using [Poetry](https://github.com/python-poetry/poetry) with `poetry install` (using Python 3.11)
 2. Add a `.env` file to source from with the following variables:
     - LOGINNAME (the email address you use to log in to LinkedIn)
     - PASSWORD (the password you use to log in to LinkedIn)
 3. Run the script with `poetry run python scrape.py --user <username>`
 4. Optionally specify
-    - `--since` as the date to scrape posts from (defaults to `2022-01-01`),
-    - `--until` as the date to scrape posts until (defaults to `2023-01-01`),
+    - `--since` as the date to scrape posts from (defaults to `2023-01-01`),
+    - `--until` as the date to scrape posts until (defaults to `2024-01-01`),
     - `--reactors` to also scrape the reactors for each post (defaults to `False`)
     - `--hashtags` to also scrape the hashtags for each post (defaults to `False`)
-    - `--headless` to run the script without a browser window (defaults to `True`, requires `True` to solve the login verification challenge)
+    - `--headless` to run the script without a browser window (defaults to `True`, requires `False` to solve the login verification challenge)
 5. Complete the login verification challenge if prompted
 
 ## Issues
