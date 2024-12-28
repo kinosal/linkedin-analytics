@@ -20,7 +20,6 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions
-from webdriver_manager.chrome import ChromeDriverManager
 import bs4
 
 
@@ -37,9 +36,7 @@ class LinkedInBrowser:
         if "google.colab" in sys.modules:  # Use installed chromedriver in Google Colab
             self.browser = webdriver.Chrome("chromedriver", options=options)
         else:
-            self.browser = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()), options=options
-            )
+            self.browser = webdriver.Chrome(service=Service(), options=options)
         # Indicate if global bottom of page is reached,
         # i.e. there are no more posts to show
         self.global_bottom = False
@@ -55,9 +52,7 @@ class LinkedInBrowser:
             },
             "analytics": {
                 "tag": "div",
-                "attrs": {
-                    "class": "update-v2-social-activity"
-                },
+                "attrs": {"class": "update-v2-social-activity"},
             },
             "impressions": {  # only available for post by the logged in user
                 "tag": "span",
@@ -65,15 +60,11 @@ class LinkedInBrowser:
             },
             "reactions": {
                 "tag": "li",
-                "attrs": {
-                    "class": "social-details-social-counts__reactions"
-                },
+                "attrs": {"class": "social-details-social-counts__reactions"},
             },
             "comments": {
                 "tag": "li",
-                "attrs": {
-                    "class": "social-details-social-counts__comments"
-                },
+                "attrs": {"class": "social-details-social-counts__comments"},
             },
         }
 
@@ -128,9 +119,7 @@ class LinkedInBrowser:
                 post_soup, **self.element_identifiers["reactions"]
             )
         elif tag == "comments":
-            return self.extract_count(
-                post_soup, **self.element_identifiers["comments"]
-            )
+            return self.extract_count(post_soup, **self.element_identifiers["comments"])
         elif tag == "reactors":
             return self.extract_reactors(post_soup)
         elif tag == "hashtags":
@@ -176,7 +165,7 @@ class LinkedInBrowser:
         div_id = analytics_soup.get("id")
         button = self.browser.find_element("xpath", f"//div[@id='{div_id}']//button")
         button.click()
-        time.sleep(1)
+        time.sleep(2)
 
         try:
             modal = self.browser.find_element(
@@ -195,7 +184,7 @@ class LinkedInBrowser:
                 self.browser.execute_script(
                     "arguments[0].scrollTop = arguments[0].scrollHeight", modal
                 )
-                time.sleep(1)
+                time.sleep(2)
                 new_modal_height = modal_content.get_attribute("scrollHeight")
 
             modal_soup = bs4.BeautifulSoup(
@@ -216,7 +205,7 @@ class LinkedInBrowser:
                 "xpath", "//button[@aria-label='Dismiss']"
             )
             close_button.click()
-            time.sleep(1)
+            time.sleep(2)
 
             return reactor_names
 
@@ -257,7 +246,7 @@ class LinkedInBrowser:
             posts.append(tags)
             if "urn" in tags:
                 print(f"Extracted analytics for {tags['urn']}")
-                time.sleep(1)
+                time.sleep(2)
 
         # Hashtags are not shown on the page and need to be extracted separately
         # for reactors to be extractable by interacting with the browser
@@ -274,14 +263,15 @@ class LinkedInBrowser:
         )
 
         # Scroll down to bottom and wait to load more posts on page
-        self.browser.execute_script(f"window.scrollTo(0, {self.last_height - 1500});")
-        time.sleep(1)
-        self.browser.execute_script(f"window.scrollTo(0, {self.last_height - 1000});")
-        time.sleep(1)
-        self.browser.execute_script(f"window.scrollTo(0, {self.last_height - 500});")
-        time.sleep(1)
-        self.browser.execute_script(f"window.scrollTo(0, {self.last_height});")
-        time.sleep(1)
+        current_position = self.browser.execute_script("return window.pageYOffset;")
+        scroll_increment = 500
+        target_position = self.browser.execute_script("return document.body.scrollHeight;")
+
+        while current_position < target_position:
+            next_position = min(current_position + scroll_increment, target_position)
+            self.browser.execute_script(f"window.scrollTo(0, {next_position});")
+            current_position = next_position
+            time.sleep(2)
 
         # Calculate new scroll height and stop if at global bottom
         new_height = self.browser.execute_script("return document.body.scrollHeight")
@@ -304,7 +294,7 @@ class LinkedInBrowser:
         self.browser.get(
             "https://www.linkedin.com/in/" + user + "/recent-activity/shares/"
         )
-        time.sleep(6)
+        time.sleep(8)
 
         # Scroll to bottom of page to load all posts from specified date
         post_analytics = self.get_shown_post_analytics(include=["time"])
@@ -342,11 +332,16 @@ class LinkedInBrowser:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--user", help="LinkedIn user to scrape", required=True)
-    parser.add_argument("--since", help="First date to scrape", default="2023-01-01")
-    parser.add_argument("--until", help="Last date to scrape", default="2024-01-01")
+    parser.add_argument("--since", help="First date to scrape", default="2024-01-01")
+    parser.add_argument("--until", help="Last date to scrape", default="2025-01-01")
     parser.add_argument("--reactors", help="Include reactors?", default=False)
     parser.add_argument("--hashtags", help="Include hashtags?", default=False)
-    parser.add_argument("--headless", help="Run headless browser?", default=True)
+    parser.add_argument(
+        "--headless",
+        help="Run headless browser?",
+        type=lambda x: x.lower() == "true",
+        default=True,
+    )
     # Headless needs to be False to solve potential LinkedIn security verification
     args = parser.parse_args()
     include = ["urn", "time", "impressions", "reactions", "comments"]

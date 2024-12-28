@@ -16,13 +16,13 @@ logging.basicConfig(format="\n%(asctime)s\n%(message)s", level=logging.INFO, for
 
 
 # Define functions
-@st.experimental_memo(ttl=60 * 60 * 24, show_spinner=False)
+# @st.cache_data(ttl=60 * 60 * 24, show_spinner=False)
 def analyze(
     login: str,
     password: str,
     user: str,
-    since: str = "2022-01-01",
-    until: str = "2023-01-01",
+    since: str = "2024-01-01",
+    until: str = "2025-01-01",
     include: list = ["urn", "time", "impressions", "reactions", "comments"],
 ):
     with spinner_placeholder:
